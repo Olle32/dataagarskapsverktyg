@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <title>Dataägarskapsverktyg — test</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+  <style>
+    #graf { width: 100%; height: 600px; border: 1px solid #ccc; }
+  </style>
+</head>
+<body>
+  <h1>Test av Cytoscape.js</h1>
+  <div id="graf"></div>
+
+  <script>
+    var cy = cytoscape({
+      container: document.getElementById('graf'),
+      elements: [
+        { data: { id: 'a', label: 'System A' } },
+        { data: { id: 'b', label: 'System B' } },
+        { data: { id: 'ab', source: 'a', target: 'b', label: 'testflöde' } }
+      ],
+      style: [
+        { selector: 'node', style: { 'label': 'data(label)', 'background-color': '#1f3a5f' } },
+        { selector: 'edge', style: { 'label': 'data(label)', 'curve-style': 'bezier', 'target-arrow-shape': 'triangle' } }
+      ],
+      layout: { name: 'breadthfirst' }
+    });
+  </script>
+</body>
+</html>
