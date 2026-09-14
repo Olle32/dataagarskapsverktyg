@@ -5,28 +5,66 @@
   <title>Dataägarskap och informationsflöden — Nordfordon AB</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
   <style>
-    body { font-family: sans-serif; margin: 2rem; }
+    body { font-family: sans-serif; margin: 2rem; max-width: 1100px; }
     #graf { width: 100%; height: 700px; border: 1px solid #ccc; }
     .varning { color: #a33; font-weight: bold; }
+    .panel { margin: 1rem 0; padding: 1rem; background: #f5f5f5; border-radius: 6px; }
+    #konsumenter { margin-top: 0.5rem; }
+    select { font-size: 1rem; padding: 0.3rem; }
   </style>
 </head>
 <body>
   <h1>Dataägarskap och informationsflöden — Nordfordon AB (fiktivt exempel)</h1>
-  <p class="varning">⚠ 1 system saknar utpekad ägare (röd kant nedan)</p>
+  <p class="varning">⚠ 1 system saknar utpekad ägare (röd kant i grafen)</p>
+
+  <div class="panel">
+    <label for="objektval"><strong>Spåra ett informationsobjekt:</strong></label><br>
+    <select id="objektval">
+      <option value="">— välj —</option>
+    </select>
+    <div id="konsumenter"></div>
+  </div>
+
   <div id="graf"></div>
 
   <script>
+    var infoObjects = [{"id": "felkoder", "name": "Felkoder (diagnostikkoder)", "source_system": "telemetri", "consumers": ["Kvalitetsteknik", "Analys/BI", "Produktutveckling"]}, {"id": "matvarden", "name": "Mätvärden", "source_system": "telemetri", "consumers": ["Analys/BI", "Produktutveckling"]}, {"id": "komponentdata", "name": "Komponentdata", "source_system": "produktion", "consumers": ["Kvalitetsteknik", "Analys/BI", "Tillverkning"]}, {"id": "kunduppgifter", "name": "Kunduppgifter (kontakt, ägarhistorik)", "source_system": "crm", "consumers": ["Eftermarknad", "Analys/BI"]}];
+
     var cy = cytoscape({
       container: document.getElementById('graf'),
       elements: [{"data": {"id": "telemetri", "label": "Fordonstelemetri", "owner": "Produktutveckling"}}, {"data": {"id": "produktion", "label": "Produktionssystem", "owner": "Tillverkning"}}, {"data": {"id": "erp", "label": "ERP", "owner": "Ekonomi/Inköp"}}, {"data": {"id": "crm", "label": "CRM/Återförsäljarsystem", "owner": "Eftermarknad"}}, {"data": {"id": "integrationslager", "label": "Integrationslager (legacy)", "owner": null}}, {"data": {"id": "datalager", "label": "Datalager", "owner": "IT/Data"}}, {"data": {"id": "rapportlager", "label": "Rapportlager (BI)", "owner": "Analys/BI"}}, {"data": {"id": "flow-0", "source": "telemetri", "target": "integrationslager", "label": "felkoder, matvarden"}}, {"data": {"id": "flow-1", "source": "integrationslager", "target": "datalager", "label": "felkoder, matvarden"}}, {"data": {"id": "flow-2", "source": "produktion", "target": "datalager", "label": "komponentdata"}}, {"data": {"id": "flow-3", "source": "erp", "target": "produktion", "label": "komponentdata"}}, {"data": {"id": "flow-4", "source": "crm", "target": "datalager", "label": "kunduppgifter"}}, {"data": {"id": "flow-5", "source": "datalager", "target": "rapportlager", "label": "felkoder, matvarden, komponentdata"}}],
       style: [
         { selector: 'node', style: { 'label': 'data(label)', 'background-color': '#1f3a5f', 'color': '#1f3a5f', 'text-valign': 'bottom', 'text-margin-y': 6 } },
-        { selector: 'node[owner]', style: { 'border-width': 0 } },
-        { selector: 'node[?owner]', style: { 'border-width': 0 } },
         { selector: 'node[!owner]', style: { 'border-width': 4, 'border-color': '#c0392b', 'border-style': 'solid' } },
+        { selector: 'node.kalla', style: { 'background-color': '#1a7a3c', 'border-width': 4, 'border-color': '#1a7a3c' } },
         { selector: 'edge', style: { 'label': 'data(label)', 'curve-style': 'bezier', 'target-arrow-shape': 'triangle', 'font-size': 10, 'color': '#555', 'text-background-color': '#fff', 'text-background-opacity': 1, 'text-background-padding': 2 } }
       ],
       layout: { name: 'breadthfirst', directed: true, spacingFactor: 1.5 }
+    });
+
+    var select = document.getElementById('objektval');
+    infoObjects.forEach(function(obj) {
+      var option = document.createElement('option');
+      option.value = obj.id;
+      option.textContent = obj.name;
+      select.appendChild(option);
+    });
+
+    select.addEventListener('change', function() {
+      cy.nodes().removeClass('kalla');
+      var konsumentDiv = document.getElementById('konsumenter');
+
+      if (!this.value) {
+        konsumentDiv.textContent = '';
+        return;
+      }
+
+      var valt = infoObjects.find(function(o) { return o.id === select.value; });
+
+      cy.getElementById(valt.source_system).addClass('kalla');
+
+      konsumentDiv.innerHTML = '<strong>Källsystem:</strong> ' + valt.source_system +
+        '<br><strong>Konsumenter (' + valt.consumers.length + '):</strong> ' + valt.consumers.join(', ');
     });
   </script>
 </body>
