@@ -1,0 +1,203 @@
+# nordfordon.yaml — fiktiv exempelmiljö för dataägarskapsverktyget
+# Alla namn, system och personer/roller är påhittade.
+
+systems:
+  - id: telemetri
+    name: Fordonstelemetri
+    type: källa
+    owning_function: Produktutveckling
+    criticality: hög
+    note: >
+      Samlar in data direkt från fordon i fält. Samma systemtyp men olika
+      datafält beroende på fordonskonfiguration (motorvariant, marknad) —
+      inte modellerat som egen instans, bara en anteckning här.
+
+  - id: produktion
+    name: Produktionssystem
+    type: källa
+    owning_function: Tillverkning
+    criticality: hög
+    note: Genererar fordonsdata vid tillverkning (serienummer, komponentkoder, kalibreringsvärden).
+
+  - id: erp
+    name: ERP
+    type: källa
+    owning_function: Ekonomi/Inköp
+    criticality: hög
+    note: Leverantörs- och komponentdata, kopplad till produktionssystemet via komponentkoder.
+
+  - id: crm
+    name: CRM/Återförsäljarsystem
+    type: källa
+    owning_function: Eftermarknad
+    criticality: medel
+    note: Kunddata, serviceärenden, garantiärenden från återförsäljarnätet.
+
+  - id: integrationslager
+    name: Integrationslager (legacy)
+    type: mellanlager
+    owning_function: null
+    criticality: hög
+    note: >
+      Byggt för ~10 år sedan för att koppla ihop telemetri och produktion
+      innan datalagret fanns. Ingen aktiv systemägare längre — ursprungligt
+      team är upplöst. Fortfarande i drift eftersom flera nedströms-rapporter
+      beror på det. Ett av de vanligaste fynden i en kartläggning: ett
+      system alla använder men ingen längre känner ansvar för.
+
+  - id: datalager
+    name: Datalager
+    type: mellanlager
+    owning_function: IT/Data
+    criticality: hög
+    note: Samlar in från telemetri (delvis via integrationslagret), produktion, ERP och CRM.
+
+  - id: rapportlager
+    name: Rapportlager (BI)
+    type: konsument
+    owning_function: Analys/BI
+    criticality: medel
+    note: Det verksamheten faktiskt tittar på — KPI:er, uppföljning, dashboards.
+
+information_objects:
+  - id: felkoder
+    name: Felkoder (diagnostikkoder)
+    source_system: telemetri
+    fields:
+      - felkod: "Standardiserad diagnostikkod (t.ex. motor, bromssystem)"
+      - tidsstämpel: "När felet registrerades i fordonet"
+      - fordons_id: "Anonymiserat fordons-ID, inte kopplat till kund i detta system"
+    classification: intern
+    gdpr_relevant: nej
+    roller:
+      källägare: Produktutveckling
+      nedströmsägare: Analys/BI
+      uppföljningsansvarig: Kvalitetsteknik
+      rättningsmandat: Produktutveckling
+
+  - id: matvarden
+    name: Mätvärden
+    source_system: telemetri
+    fields:
+      - varde: "Numeriskt värde, tolkning beror helt på mätpunkt"
+      - matpunkt: "Vilken sensor/mätpunkt värdet kommer från (t.ex. kylvätsketemp, körsträcka)"
+      - enhet: "km, °C, varv/min m.m. — varierar per mätpunkt och behöver egen ordlista"
+      - fordons_id: "Anonymiserat fordons-ID"
+    classification: intern
+    gdpr_relevant: nej
+    note: >
+      Det svåraste informationsobjektet att dokumentera i praktiken — samma
+      fältnamn kan bära olika enheter beroende på fordonskonfiguration.
+      Fältdefinitionerna här är medvetet en förenkling av en betydligt
+      större verklig ordlista.
+    roller:
+      källägare: Produktutveckling
+      nedströmsägare: Analys/BI
+      uppföljningsansvarig: Kvalitetsteknik
+      rättningsmandat: Produktutveckling
+
+  - id: komponentdata
+    name: Komponentdata
+    source_system: produktion
+    fields:
+      - komponentkod: "Kopplar till leverantörsdata i ERP"
+      - serienummer: "Unikt per tillverkad komponent"
+      - kalibreringsvarde: "Satt vid tillverkning, kritiskt för viss diagnostik nedströms"
+    classification: intern
+    gdpr_relevant: nej
+    roller:
+      källägare: Tillverkning
+      nedströmsägare: Tillverkning
+      uppföljningsansvarig: Kvalitetsteknik
+      rättningsmandat: Tillverkning
+
+  - id: kunduppgifter
+    name: Kunduppgifter (kontakt, ägarhistorik)
+    source_system: crm
+    fields:
+      - namn: "Fordonsägarens namn"
+      - kontaktuppgifter: "Telefon, e-post, adress"
+      - fordons_koppling: "Vilket fordon (chassinummer) kunden äger"
+    classification: känslig
+    gdpr_relevant: ja
+    roller:
+      källägare: Eftermarknad
+      nedströmsägare: Eftermarknad
+      uppföljningsansvarig: Eftermarknad
+      rättningsmandat: Eftermarknad
+
+flows:
+  - from: telemetri
+    to: integrationslager
+    object: felkoder
+    frequency: daglig batch
+    integration_type: filöverföring
+    note: Ursprunglig integration, aldrig migrerad när datalagret byggdes.
+
+  - from: telemetri
+    to: integrationslager
+    object: matvarden
+    frequency: daglig batch
+    integration_type: filöverföring
+
+  - from: integrationslager
+    to: datalager
+    object: felkoder
+    frequency: daglig batch
+    integration_type: filöverföring
+    note: >
+      Historiskt fördröjd upp till ett dygn totalt över de två hoppen —
+      påverkar hur "färska" felkoder är i rapportlagret.
+
+  - from: integrationslager
+    to: datalager
+    object: matvarden
+    frequency: daglig batch
+    integration_type: filöverföring
+
+  - from: produktion
+    to: datalager
+    object: komponentdata
+    frequency: daglig batch
+    integration_type: API
+
+  - from: erp
+    to: produktion
+    object: komponentdata
+    frequency: realtid
+    integration_type: API
+    note: ERP är ursprungskälla för leverantörsdelen av komponentkoden.
+
+  - from: crm
+    to: datalager
+    object: kunduppgifter
+    frequency: daglig batch
+    integration_type: API
+
+  - from: datalager
+    to: rapportlager
+    object: felkoder
+    frequency: daglig batch
+    integration_type: schemalagd ETL
+
+  - from: datalager
+    to: rapportlager
+    object: matvarden
+    frequency: daglig batch
+    integration_type: schemalagd ETL
+
+  - from: datalager
+    to: rapportlager
+    object: komponentdata
+    frequency: daglig batch
+    integration_type: schemalagd ETL
+
+consumers:
+  - object: felkoder
+    consumers: [Kvalitetsteknik, Analys/BI, Produktutveckling]
+  - object: matvarden
+    consumers: [Analys/BI, Produktutveckling]
+  - object: komponentdata
+    consumers: [Kvalitetsteknik, Analys/BI, Tillverkning]
+  - object: kunduppgifter
+    consumers: [Eftermarknad, Analys/BI]
